@@ -13,12 +13,10 @@ class GA(object):
     Genetic algorithm
     """
     def __init__(self, components, target, size=10, n_ensemble=1000,
-                 crossing_freq=.8, mutation_freq=1., imposed_component=None):
+                 crossing_freq=.8, mutation_freq=1.):
         """
         • n_ensemble: number of ensembles to generate
         • size: size of the generated ensembles
-        • If imposed_component is not None, this component is imposed in all
-        generated ensembles.
         """
         self.crossing_freq = crossing_freq
         self.mutation_freq = mutation_freq
@@ -35,7 +33,6 @@ class GA(object):
         self.offset = None
         self.weights = None
         self.component_ids = None
-        self.imposed_component = imposed_component
 
     def get_chi2(self, args):
         """
@@ -61,8 +58,6 @@ class GA(object):
         component_id = numpy.random.choice(self.n_components, self.size,
                                            replace=False)
         ensemble = self.components[component_id]
-        if self.imposed_component is not None:
-            ensemble = numpy.r_[ensemble, self.imposed_component[None,:]]
         self.ensemble = ensemble
         return component_id
 
@@ -154,10 +149,7 @@ class GA(object):
         offset.
         """
         cons = ({'type': 'eq', 'fun': lambda x: sum(x) == 1})
-        if self.imposed_component is not None:
-            size = self.size + 1
-        else:
-            size = self.size
+        size = self.size
         weights = numpy.ones(size)*1/float(size)
         res = scipy.optimize.minimize(self.weight_ensemble, weights,
                                       constraints=cons,
