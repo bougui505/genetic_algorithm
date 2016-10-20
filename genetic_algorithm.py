@@ -24,7 +24,14 @@ class GA(object):
         self.target = target
         self.size = size
         self.n_ensemble = n_ensemble
-        self.n_components = self.components.shape[0]
+        if isinstance(self.components, tuple): # Multiple experimental data per
+                                               # component
+            self.n_components = self.components[0].shape[0]
+            self.n_experiments = len(self.components)
+            print "Number of experimental data type: %d"%self.n_experiments
+        else:
+            self.n_components = self.components.shape[0]
+            self.n_experiments = 1
         self.ensemble = None
         self.model = None
         self.population = None
@@ -33,23 +40,30 @@ class GA(object):
         self.offset = None
         self.weights = None
         self.component_ids = None
+        self.exp_id = None # Experimental index
 
     def get_chi2(self, args):
         """
         Compute the Chi2
         """
         scale, offset = args
-        chi2 = ((scale * (self.model + offset) - self.target[:, 1])**2 /\
-                self.target[:, 2]**2).mean()
+        chi2 = ((scale * (self.model + offset) -\
+                self.target[self.exp_id][:, 1])**2 /\
+                self.target[self.exp_id][:, 2]**2).mean()
         return chi2
 
     def weight_ensemble(self, weights):
         """
         compute the weights that minimize Chi2
         """
-        self.model = (self.ensemble * weights[:, None]).sum(axis=0)
-        chi2 = self.get_chi2((1., 0.))
-        return chi2
+        chi2_list = []
+        for self.exp_id in range(self.n_experiments):
+            ensemble = self.ensemble[self.exp_id]
+            self.model = (ensemble * weights[:, None]).sum(axis=0)
+            chi2 = self.get_chi2((1., 0.))
+            chi2_list.append(chi2)
+        chi2_mean = numpy.mean(chi2_list)
+        return chi2_mean
 
     def generate_ensemble(self):
         """
@@ -57,8 +71,10 @@ class GA(object):
         """
         component_id = numpy.random.choice(self.n_components, self.size,
                                            replace=False)
-        ensemble = self.components[component_id]
-        self.ensemble = ensemble
+        ensemble = []
+        for exp_id in range(self.n_experiments):
+            ensemble.append(self.components[exp_id][component_id])
+        self.ensemble = tuple(ensemble)
         return component_id
 
     def generate_parents(self):
@@ -94,8 +110,9 @@ class GA(object):
         for mutant_index in mutant_index_list:
             gene_index = numpy.random.choice(self.size)
             new_gene_index = numpy.random.choice(self.n_components)
-            offspring[mutant_index][gene_index] =\
-                                                 self.components[new_gene_index]
+            for exp_id in range(self.n_experiments):
+                offspring[mutant_index, exp_id, gene_index] =\
+                                         self.components[exp_id][new_gene_index]
             offspring_component_ids[mutant_index][gene_index] = new_gene_index
         # Crossing over
         cross_index_list = numpy.random.choice(self.n_ensemble,
@@ -107,20 +124,22 @@ class GA(object):
                                                size=\
                                                numpy.random.choice(\
                                             range(1, self.size)), replace=False)
-            part_1 = numpy.copy(offspring[cross_index_1][gene_indices])
-            part_2 = numpy.copy(offspring[cross_index_2][gene_indices])
+            part_1 = numpy.copy(offspring[cross_index_1, :, gene_indices])
+            part_2 = numpy.copy(offspring[cross_index_2, :, gene_indices])
             ids_1 = numpy.copy(offspring_component_ids[cross_index_1]\
                                                                  [gene_indices])
             ids_2 = numpy.copy(offspring_component_ids[cross_index_2]\
                                                                  [gene_indices])
-            offspring[cross_index_1][gene_indices] = part_2
-            offspring[cross_index_2][gene_indices] = part_1
+            offspring[cross_index_1, :, gene_indices] = part_2
+            offspring[cross_index_2, :, gene_indices] = part_1
             offspring_component_ids[cross_index_1][gene_indices] = ids_2
             offspring_component_ids[cross_index_2][gene_indices] = ids_1
-        self.population = numpy.r_[self.population, offspring]
+        self.population = numpy.concatenate((self.population, offspring))
         self.component_ids.extend(offspring_component_ids)
         self.component_ids = numpy.asarray(self.component_ids)
         for self.ensemble in offspring:
+            self.ensemble = tuple([numpy.asarray([e for e in self.ensemble[i]])\
+                                  for i in range(self.n_experiments)])
             chi2, scale, offset, weights = self.minimize_chi2()
             self.chi2.append(chi2)
             self.scale.append(scale)
@@ -155,8 +174,17 @@ class GA(object):
                                       constraints=cons,
                                       bounds=[(0, 1), ] * size)
         weights = res.x
-        self.model = (self.ensemble * weights[:, None]).sum(axis=0)
-        res = scipy.optimize.minimize(self.get_chi2, [1., 0.])
-        scale, offset = res.x
-        chi2 = self.get_chi2((scale, offset))
-        return chi2, scale, offset, weights
+        chi2_list = []
+        scales = []
+        offsets = []
+        for self.exp_id in range(self.n_experiments):
+            self.model = (self.ensemble[self.exp_id] * weights[:, None]).\
+                                                                     sum(axis=0)
+            res = scipy.optimize.minimize(self.get_chi2, [1., 0.])
+            scale, offset = res.x
+            scales.append(scale)
+            offsets.append(offset)
+            chi2 = self.get_chi2((scale, offset))
+            chi2_list.append(chi2)
+        chi2_mean = numpy.mean(chi2_list)
+        return chi2_mean, scales, offsets, weights
