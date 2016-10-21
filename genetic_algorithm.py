@@ -32,6 +32,8 @@ class GA(object):
         else:
             self.n_components = self.components.shape[0]
             self.n_experiments = 1
+            self.components = (self.components, )
+            self.target = (self.target, )
         self.ensemble = None
         self.model = None
         self.population = None
