@@ -38,6 +38,7 @@ class GA(object):
         self.model = None
         self.population = None
         self.chi2 = None
+        self.chi2_exp = [] # Chi2 for each experiment
         self.scale = None
         self.offset = None
         self.weights = None
@@ -148,6 +149,7 @@ class GA(object):
             self.offset.append(offset)
             self.weights.append(weights)
         self.chi2 = numpy.asarray(self.chi2)
+        self.chi2_exp = numpy.asarray(self.chi2_exp)
         self.scale = numpy.asarray(self.scale)
         self.offset = numpy.asarray(self.offset)
         self.weights = numpy.asarray(self.weights)
@@ -158,6 +160,8 @@ class GA(object):
         """
         sorter = numpy.argsort(self.chi2)
         self.chi2 = list(self.chi2[sorter][:self.n_ensemble])
+        self.chi2_exp = [tuple(e) \
+                         for e in self.chi2_exp[sorter][:self.n_ensemble]]
         self.scale = list(self.scale[sorter][:self.n_ensemble])
         self.offset = list(self.offset[sorter][:self.n_ensemble])
         self.weights = list(self.weights[sorter][:self.n_ensemble])
@@ -188,5 +192,6 @@ class GA(object):
             offsets.append(offset)
             chi2 = self.get_chi2((scale, offset))
             chi2_list.append(chi2)
+        self.chi2_exp.append(tuple(chi2_list))
         chi2_mean = numpy.mean(chi2_list)
         return chi2_mean, scales, offsets, weights
