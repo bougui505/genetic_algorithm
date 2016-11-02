@@ -13,10 +13,13 @@ class GA(object):
     Genetic algorithm
     """
     def __init__(self, components, target, size=10, n_ensemble=1000,
-                 crossing_freq=.8, mutation_freq=1.):
+                 crossing_freq=.8, mutation_freq=1., weights_experiment=None):
         """
         • n_ensemble: number of ensembles to generate
         • size: size of the generated ensembles
+        • weights_experiment: weight of each experiment. If
+          weights_experiment=None, then all data in a are assumed to have a
+          weight equal to one.
         """
         self.crossing_freq = crossing_freq
         self.mutation_freq = mutation_freq
@@ -44,6 +47,7 @@ class GA(object):
         self.weights = None
         self.component_ids = None
         self.exp_id = None # Experimental index
+        self.weights_experiment = weights_experiment
 
     def get_chi2(self, args):
         """
@@ -65,7 +69,7 @@ class GA(object):
             self.model = (ensemble * weights[:, None]).sum(axis=0)
             chi2 = self.get_chi2((1., 0.))
             chi2_list.append(chi2)
-        chi2_mean = numpy.mean(chi2_list)
+        chi2_mean = numpy.average(chi2_list, weights=self.weights_experiment)
         return chi2_mean
 
     def generate_ensemble(self):
@@ -193,5 +197,5 @@ class GA(object):
             chi2 = self.get_chi2((scale, offset))
             chi2_list.append(chi2)
         self.chi2_exp.append(tuple(chi2_list))
-        chi2_mean = numpy.mean(chi2_list)
+        chi2_mean = numpy.average(chi2_list, weights=self.weights_experiment)
         return chi2_mean, scales, offsets, weights
