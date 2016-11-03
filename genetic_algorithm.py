@@ -72,6 +72,16 @@ class GA(object):
         chi2_mean = numpy.average(chi2_list, weights=self.weights_experiment)
         return chi2_mean
 
+    def get_models(self, exp_id):
+        """
+        return all the models for the given experiment id
+        """
+        population = self.population[:, exp_id, :]
+        models = (population * numpy.asarray(self.weights)).sum(axis=1)
+        models = numpy.asarray(self.scale)[:, exp_id] *\
+                 (models + numpy.asarray(self.offset)[:, exp_id])
+        return models
+
     def generate_ensemble(self):
         """
         generate a random ensemble
