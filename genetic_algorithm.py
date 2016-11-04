@@ -76,10 +76,14 @@ class GA(object):
         """
         return all the models for the given experiment id
         """
-        population = self.population[:, exp_id, :]
-        models = (population * numpy.asarray(self.weights)).sum(axis=1)
-        models = numpy.asarray(self.scale)[:, exp_id] *\
-                 (models + numpy.asarray(self.offset)[:, exp_id])
+        if self.n_experiments > 1:
+            population = self.population[:, exp_id, :]
+            models = (population * numpy.asarray(self.weights)).sum(axis=1)
+            models = numpy.asarray(self.scale)[:, exp_id] *\
+                     (models + numpy.asarray(self.offset)[:, exp_id])
+        else:
+            models = (self.population[:, exp_id] * numpy.asarray(self.weights)[:,:,None]).sum(axis=1)
+            models = numpy.asarray(self.scale) * (models + numpy.asarray(self.offset))
         return models
 
     def generate_ensemble(self):
