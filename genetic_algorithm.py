@@ -59,6 +59,16 @@ class GA(object):
                 self.target[self.exp_id][:, 2]**2).mean()
         return chi2
 
+    def get_qfactor(self, args):
+        """
+        Compute the Q-factor
+        """
+        scale, offset = args
+        rms = lambda val: numpy.sqrt(numpy.power(val, 2).mean())
+        obs = self.target[self.exp_id][:, 2]
+        calc = scale * (self.model + offset)
+        return rms(obs - calc) / rms(obs)
+
     def weight_ensemble(self, weights):
         """
         compute the weights that minimize Chi2
