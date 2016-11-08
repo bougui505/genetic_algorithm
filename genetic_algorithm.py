@@ -180,10 +180,10 @@ class GA(object):
         self.population = numpy.concatenate((self.population, offspring))
         self.component_ids.extend(offspring_component_ids)
         self.component_ids = numpy.asarray(self.component_ids)
-        for self.ensemble in offspring:
+        for offspring_id, self.ensemble in enumerate(offspring):
             self.ensemble = tuple([numpy.asarray([e for e in self.ensemble[i]])\
                                   for i in range(self.n_experiments)])
-            score, scale, offset, weights = self.minimize_score()
+            score, scale, offset, weights = self.minimize_score(weights=self.weights[offspring_id])
             self.score.append(score)
             self.scale.append(scale)
             self.offset.append(offset)
@@ -208,14 +208,15 @@ class GA(object):
         self.population = self.population[sorter][:self.n_ensemble]
         self.component_ids = list(self.component_ids[sorter][:self.n_ensemble])
 
-    def minimize_score(self):
+    def minimize_score(self, weights=None):
         """
         Minimize the score by finding the best weights then the best scaling and
         offset.
         """
         cons = ({'type': 'eq', 'fun': lambda x: sum(x) == 1})
         size = self.size
-        weights = numpy.ones(size)*1/float(size)
+        if weights is None:
+            weights = numpy.random.dirichlet(numpy.ones(size))
         res = scipy.optimize.minimize(self.weight_ensemble, weights,
                                       constraints=cons,
                                       bounds=[(0, 1), ] * size)
