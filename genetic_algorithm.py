@@ -13,13 +13,16 @@ class GA(object):
     Genetic algorithm
     """
     def __init__(self, components, target, size=10, n_ensemble=1000,
-                 crossing_freq=.8, mutation_freq=1., weights_experiment=None):
+                 crossing_freq=.8, mutation_freq=1., weights_experiment=None,
+                 score_type=None):
         """
         • n_ensemble: number of ensembles to generate
         • size: size of the generated ensembles
         • weights_experiment: weight of each experiment. If
           weights_experiment=None, then all data in a are assumed to have a
           weight equal to one.
+        • score_type: score type for each experiment: 'chi2' or 'qfactor'.
+          If None, chi2 is chosen for all experiments.
         """
         self.crossing_freq = crossing_freq
         self.mutation_freq = mutation_freq
@@ -40,14 +43,18 @@ class GA(object):
         self.ensemble = None
         self.model = None
         self.population = None
-        self.chi2 = None
-        self.chi2_exp = [] # Chi2 for each experiment
+        self.score = None
+        self.score_exp = [] # score for each experiment
         self.scale = None
         self.offset = None
         self.weights = None
         self.component_ids = None
         self.exp_id = None # Experimental index
         self.weights_experiment = weights_experiment
+        if score_type is None:
+            self.score_type = ('chi2', ) * self.n_experiments
+        else:
+            self.score_type = score_type
 
     def get_chi2(self, args):
         """
@@ -64,23 +71,28 @@ class GA(object):
         Compute the Q-factor
         """
         scale, offset = args
-        rms = lambda val: numpy.sqrt(numpy.power(val, 2).mean())
-        obs = self.target[self.exp_id][:, 2]
+        sumsq = lambda val: numpy.power(val, 2).sum()
+        obs = self.target[self.exp_id][:, 1]
         calc = scale * (self.model + offset)
-        return rms(obs - calc) / rms(obs)
+        return numpy.sqrt(sumsq(obs - calc) / sumsq(obs))
 
     def weight_ensemble(self, weights):
         """
-        compute the weights that minimize Chi2
+        compute the weights that minimize the score (mixture of chi2 and
+        Q-factor)
         """
-        chi2_list = []
+        score_list = []
         for self.exp_id in range(self.n_experiments):
             ensemble = self.ensemble[self.exp_id]
             self.model = (ensemble * weights[:, None]).sum(axis=0)
-            chi2 = self.get_chi2((1., 0.))
-            chi2_list.append(chi2)
-        chi2_mean = numpy.average(chi2_list, weights=self.weights_experiment)
-        return chi2_mean
+            if self.score_type[self.exp_id] == 'chi2':
+                chi2 = self.get_chi2((1., 0.))
+                score_list.append(chi2)
+            elif self.score_type[self.exp_id] == 'qfactor':
+                qfactor = self.get_qfactor((1., 0.))
+                score_list.append(qfactor)
+        score = numpy.average(score_list, weights=self.weights_experiment)
+        return score
 
     def get_models(self, exp_id):
         """
@@ -113,7 +125,7 @@ class GA(object):
         generate the initial population of parents
         """
         parents = []
-        self.chi2 = []
+        self.score = []
         self.scale = []
         self.offset = []
         self.weights = []
@@ -121,8 +133,8 @@ class GA(object):
         for _ in range(self.n_ensemble):
             self.component_ids.append(self.generate_ensemble())
             parents.append(self.ensemble)
-            chi2, scale, offset, weights = self.minimize_chi2()
-            self.chi2.append(chi2)
+            score, scale, offset, weights = self.minimize_score()
+            self.score.append(score)
             self.scale.append(scale)
             self.offset.append(offset)
             self.weights.append(weights)
@@ -171,13 +183,13 @@ class GA(object):
         for self.ensemble in offspring:
             self.ensemble = tuple([numpy.asarray([e for e in self.ensemble[i]])\
                                   for i in range(self.n_experiments)])
-            chi2, scale, offset, weights = self.minimize_chi2()
-            self.chi2.append(chi2)
+            score, scale, offset, weights = self.minimize_score()
+            self.score.append(score)
             self.scale.append(scale)
             self.offset.append(offset)
             self.weights.append(weights)
-        self.chi2 = numpy.asarray(self.chi2)
-        self.chi2_exp = numpy.asarray(self.chi2_exp)
+        self.score = numpy.asarray(self.score)
+        self.score_exp = numpy.asarray(self.score_exp)
         self.scale = numpy.asarray(self.scale)
         self.offset = numpy.asarray(self.offset)
         self.weights = numpy.asarray(self.weights)
@@ -186,19 +198,19 @@ class GA(object):
         """
         Select the self.n_ensemble best fitting individues
         """
-        sorter = numpy.argsort(self.chi2)
-        self.chi2 = list(self.chi2[sorter][:self.n_ensemble])
-        self.chi2_exp = [tuple(e) \
-                         for e in self.chi2_exp[sorter][:self.n_ensemble]]
+        sorter = numpy.argsort(self.score)
+        self.score = list(self.score[sorter][:self.n_ensemble])
+        self.score_exp = [tuple(e) \
+                         for e in self.score_exp[sorter][:self.n_ensemble]]
         self.scale = list(self.scale[sorter][:self.n_ensemble])
         self.offset = list(self.offset[sorter][:self.n_ensemble])
         self.weights = list(self.weights[sorter][:self.n_ensemble])
         self.population = self.population[sorter][:self.n_ensemble]
         self.component_ids = list(self.component_ids[sorter][:self.n_ensemble])
 
-    def minimize_chi2(self):
+    def minimize_score(self):
         """
-        Minimize the chi2 by finding the best weights then the best scaling and
+        Minimize the score by finding the best weights then the best scaling and
         offset.
         """
         cons = ({'type': 'eq', 'fun': lambda x: sum(x) == 1})
@@ -208,18 +220,26 @@ class GA(object):
                                       constraints=cons,
                                       bounds=[(0, 1), ] * size)
         weights = res.x
-        chi2_list = []
+        score_list = []
         scales = []
         offsets = []
         for self.exp_id in range(self.n_experiments):
             self.model = (self.ensemble[self.exp_id] * weights[:, None]).\
                                                                      sum(axis=0)
-            res = scipy.optimize.minimize(self.get_chi2, [1., 0.])
-            scale, offset = res.x
-            scales.append(scale)
-            offsets.append(offset)
-            chi2 = self.get_chi2((scale, offset))
-            chi2_list.append(chi2)
-        self.chi2_exp.append(tuple(chi2_list))
-        chi2_mean = numpy.average(chi2_list, weights=self.weights_experiment)
-        return chi2_mean, scales, offsets, weights
+            if self.score_type[self.exp_id] == 'chi2':
+                res = scipy.optimize.minimize(self.get_chi2, [1., 0.])
+                scale, offset = res.x
+                scales.append(scale)
+                offsets.append(offset)
+                chi2 = self.get_chi2((scale, offset))
+                score_list.append(chi2)
+            elif self.score_type[self.exp_id] == 'qfactor':
+                res = scipy.optimize.minimize(self.get_qfactor, [1., 0.])
+                scale, offset = res.x
+                scales.append(scale)
+                offsets.append(offset)
+                qfactor = self.get_qfactor((scale, offset))
+                score_list.append(qfactor)
+        self.score_exp.append(tuple(score_list))
+        score = numpy.average(score_list, weights=self.weights_experiment)
+        return score, scales, offsets, weights
