@@ -244,3 +244,84 @@ class GA(object):
         self.score_exp.append(tuple(score_list))
         score = numpy.average(score_list, weights=self.weights_experiment)
         return score, scales, offsets, weights
+
+
+if __name__ == '__main__':
+    import ConfigParser
+    import pickle
+    import sys
+    sys.path.append('.')
+    import progress_reporting
+
+    Config = ConfigParser.ConfigParser()
+    Config.read(sys.argv[1])
+
+    experiment_labels = list(set(Config.sections()) - set(('ga', )))
+    experimental_weights = [float(Config.get(e, 'weight'))\
+                            for e in experiment_labels]
+    score_types = [Config.get(e, 'score_type')\
+                   for e in experiment_labels]
+
+    print "Experiments: %s"%experiment_labels
+    print "weights: %s"%experimental_weights
+    print "Score types: %s"%score_types
+
+    def read_input(option):
+        """
+        Read the input files given in options 'target' and 'components' of the
+        configuration file for each section.
+        • option: 'target' or 'components'
+        """
+        output = {}
+        for experiment_label in experiment_labels:
+            output[experiment_label] =\
+                        numpy.genfromtxt(Config.get(experiment_label, option))
+        return output
+
+    ### Read target:
+    TARGETS = read_input('target')
+    ### Read model components:
+    COMPONENTS = read_input('components')
+
+    def read_ga_parameters():
+        """
+        Read the parameters for the genetic algorithm from the configuration
+        file
+        """
+        ga_params = {}
+        for option in Config.options('ga'):
+            ga_params[option] = Config.get('ga', option)
+        return ga_params
+
+    ga_params = read_ga_parameters()
+    n_ensemble = int(ga_params['n_ensemble'])
+    n_generation = int(ga_params['n_generation'])
+    size = int(ga_params['size'])
+
+    def run_ga(experiment_list, n_generation, n_ensemble, size,
+               weights_experiment, score_type):
+        """
+        Run the genetic algorithm for the given experiment list. The name of the
+        experiments are the name given in the configuration file.
+        """
+        targets = tuple([TARGETS[k] for k in experiment_list])
+        components = tuple([COMPONENTS[k] for k in experiment_list])
+        ga = GA(components, targets, size=size, n_ensemble=n_ensemble,
+                weights_experiment=weights_experiment, score_type=score_type)
+        ga.generate_parents()
+        score_list = []
+        score_exp_list = [] # chi2 by experiment type
+        progress = progress_reporting.Progress(n_generation, delta=1)
+        for i in range(n_generation):
+            ga.generate_offspring()
+            ga.selection()
+            score_min = ga.score[0]
+            score_list.append(score_min)
+            score_exp_list.append(ga.score_exp[0])
+            progress.count(report="%s: %d: %s %s"%(experiment_list, i,
+                                                   ga.score[0],
+                                                   ga.score_exp[0]))
+        with open('ga_%s_%d_%d.dat'%('_'.join(experiment_list), n_ensemble, size), 'w') as outfile:
+            pickle.dump(ga, outfile)
+    run_ga(experiment_labels, n_generation, n_ensemble, size,
+           experimental_weights, score_types)
