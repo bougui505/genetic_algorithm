@@ -297,6 +297,8 @@ if __name__ == '__main__':
     n_ensemble = int(ga_params['n_ensemble'])
     n_generation = int(ga_params['n_generation'])
     size = int(ga_params['size'])
+    rsd_stop = float(ga_params['rsd']) # Stop criteria on Relative Standard Deviation
+    window_size = int(ga_params['window_size']) # Size of the window to compute the RSD on
 
     def run_ga(experiment_list, n_generation, n_ensemble, size,
                weights_experiment, score_type):
@@ -318,9 +320,17 @@ if __name__ == '__main__':
             score_min = ga.score[0]
             score_list.append(score_min)
             score_exp_list.append(ga.score_exp[0])
-            progress.count(report="%s: %d: %s %s"%(experiment_list, i,
+            if i >= window_size - 1:
+                window = score_list[-window_size:]
+                rsd = numpy.std(window) / numpy.mean(window)
+                if rsd <= rsd_stop:
+                    print "Stop criteria reached: rsd: %.4g <= %.4g"%(rsd, rsd_stop)
+                    break
+            else:
+                rsd = numpy.nan
+            progress.count(report="%s: %d: %s %s RSD: %.4g"%(experiment_list, i,
                                                    ga.score[0],
-                                                   ga.score_exp[0]))
+                                                   ga.score_exp[0], rsd))
         with open('ga_%s_%d_%d.dat'%('_'.join(experiment_list), n_ensemble, size), 'w') as outfile:
             pickle.dump(ga, outfile)
     run_ga(experiment_labels, n_generation, n_ensemble, size,
