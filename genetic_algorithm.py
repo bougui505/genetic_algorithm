@@ -163,10 +163,13 @@ class GA(object):
                                                     self.crossing_freq))
         for cross_index_1 in cross_index_list:
             cross_index_2 = numpy.random.choice(cross_index_list)
-            gene_indices = numpy.random.choice(self.size,
-                                               size=\
-                                               numpy.random.choice(\
-                                            range(1, self.size)), replace=False)
+            if self.size > 1:
+                gene_indices = numpy.random.choice(self.size,
+                                                   size=\
+                                                   numpy.random.choice(\
+                                                range(1, self.size)), replace=False)
+            else:
+                gene_indices = 0
             part_1 = numpy.copy(offspring[cross_index_1, :, gene_indices])
             part_2 = numpy.copy(offspring[cross_index_2, :, gene_indices])
             ids_1 = numpy.copy(offspring_component_ids[cross_index_1]\
