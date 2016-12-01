@@ -140,9 +140,11 @@ class GA(object):
             self.weights.append(weights)
         self.population = numpy.asarray(parents)
 
-    def generate_offspring(self):
+    def generate_offspring(self, pde = None):
         """
         generate offspring from parents
+        pde: Probability density estimation. If not None, this pde is used to
+        pick up new components for mutations.
         """
         offspring = numpy.copy(self.population)
         # Mutations
@@ -152,7 +154,7 @@ class GA(object):
         offspring_component_ids = numpy.copy(self.component_ids)
         for mutant_index in mutant_index_list:
             gene_index = numpy.random.choice(self.size)
-            new_gene_index = numpy.random.choice(self.n_components)
+            new_gene_index = numpy.random.choice(self.n_components, p=pde)
             for exp_id in range(self.n_experiments):
                 offspring[mutant_index, exp_id, gene_index] =\
                                          self.components[exp_id][new_gene_index]
